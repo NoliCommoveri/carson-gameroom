@@ -28,7 +28,7 @@ are:
   reclaimed by a tap. A corner opens the reveal — the card in full art, every
   seat's final hand and the counts it offered — and reaching the target draws
   the standings and says whether the session was written down.
-- 329 tests under `test/`, run by GitHub Actions on every push.
+- 360 tests under `test/`, run by GitHub Actions on every push.
 - A Worker, `carson-gameroom`, serving `public/` at `games.immotus.app`, built
   by Cloudflare's GitHub integration on push to `main`.
 - A D1 database, `gameroom`, holding the schema in `docs/architecture.md` §3.1,
@@ -36,14 +36,25 @@ are:
   it and restores it — `worker/`.
 - Identity: the gate at `/gate`, two signed cookies, and the six calls behind
   them — `worker/auth.js`, `worker/gate.js`, `worker/api.js`.
-- The record's write path: `POST /api/plays` opens a row when a game is dealt
-  and `POST /api/plays/:id/end` closes it, with a result or without one. It is
-  game-agnostic; Pit is the only caller so far.
+- The record, both ways. `POST /api/plays` opens a row when a game is dealt and
+  `POST /api/plays/:id/end` closes it, with a result or without one;
+  `GET /api/plays` pages the log back out with the players it names, and
+  `GET /api/stats` carries the tile's counts. All four are game-agnostic —
+  `config_json` and `detail_json` are handed through unread — and Pit is the
+  only caller so far.
+- The log on the shelf, under the games: today's games and yesterday's — who
+  played, on which face, and how it went — cut into the phone's own days, with
+  one small tile above it and no ordering of the family anywhere on the page.
+  Older games are in the record and read from `/api/plays`; the front page is
+  what we are playing rather than everything we ever played.
+  `public/shared/record.js` is the pure half both the browser and the Worker
+  read it by.
 
-No Durable Object, and nothing reads the record yet. Profiles are made, renamed
-and re-faced from the hub. A finished Pit session writes a `plays` row and one
-`play_results` row for the human seat, and an abandoned one writes the row with
-no result — but until Phase 3 the only way to read either is `/admin`'s export.
+No Durable Object. Profiles are made, renamed and re-faced from the hub. A
+finished Pit session writes a `plays` row and one `play_results` row for the
+human seat, and an abandoned one writes the row with no result; all three shapes
+are on the front page, where an unfinished game reads as one rather than being
+hidden.
 
 ## The five things this is for
 
@@ -158,10 +169,9 @@ writing a row when a board is finished, and per-game views inside each game.
 This is the first phase where the site does something the standalone sudoku
 could not.
 
-**The write path landed earlier, in Pit session 4.** Pit is the game that
-reaches an ending first, so `POST /api/plays` and `POST /api/plays/:id/end` are
-built and in use, game-agnostic. What is left here is the reading, and sudoku's
-elapsed time, which does not exist yet.
+**The write path landed earlier, in Pit session 4**, and the reading landed in
+Session A. What is left is sudoku's elapsed time, which does not exist yet, and
+the per-game views.
 
 `docs/identity-and-stats.md` §4.3 settles what the front page shows: the log is
 the hero, the tile is small, and the page never puts the six of you in order.
@@ -172,13 +182,18 @@ Three sessions, tabled in
 [`docs/hub/specs/README.md`](docs/hub/specs/README.md). Absorbs the old
 sudoku slice 9.
 
-**Session A — the read API and the log.** Medium.
-[`docs/hub/specs/phase-3-session-a-the-read-api-and-the-log.md`](docs/hub/specs/phase-3-session-a-the-read-api-and-the-log.md).
-`GET /api/plays` and `GET /api/stats` in `worker/record.js`, the pure half in
-`public/shared/record.js`, and the log and tile on the shelf. The Worker hands
-`config_json` and `detail_json` back unread and never groups by day — a day is
-the phone's day, and a UTC Worker would file half of every evening under
-tomorrow.
+**Session A — the read API and the log.** Medium. ✅ Built.
+[`docs/hub/specs/phase-3-session-a-the-read-api-and-the-log.md`](docs/hub/specs/phase-3-session-a-the-read-api-and-the-log.md)
+is the design. `GET /api/plays` and `GET /api/stats` are `worker/record.js`,
+three statements in one `batch()` and no query per row; the pure half is
+`public/shared/record.js`, and the log and the tile are on the shelf between the
+games and the family strip. The Worker hands `config_json` and `detail_json`
+back unread and never groups by day — a day is the phone's day, and a UTC Worker
+would file half of every evening under tomorrow, which is why `/api/stats`
+returns raw timestamps and `record.js` cuts them. The log and the tile are
+fetched after first paint, so a stats query that is slow or broken leaves the
+games and the faces whole and puts one sentence where the log would be. Checked
+in headless Chromium at 360px in both themes; **S12** is what it cannot close.
 
 **Session B — sudoku's timer and its row.** Small–Medium.
 [`docs/hub/specs/phase-3-session-b-sudoku-timer-and-its-row.md`](docs/hub/specs/phase-3-session-b-sudoku-timer-and-its-row.md).
@@ -303,11 +318,12 @@ not exist at all until Phase 2.
 
 ## Open items
 
-`docs/sudoku/specs/questions.md` holds the browser checks. Everything the hub
-and Pit owed so far is run. Four are open and about the board — **S2**, **S4**,
-**S5** and **S11** — and two more are written against Phase 3 and cannot be run
-until it is built: **S12**, the front page's play log and tile, and **S13**,
-sudoku's clock.
+`docs/sudoku/specs/questions.md` holds the browser checks. Four are open and
+about the board — **S2**, **S4**, **S5** and **S11**. **S12**, the front page's
+play log and tile, is now runnable and is what Phase 3 Session A owes: whether
+the log reads as the family's memory, whether a pre-reader can read a row, and
+whether the streak becomes a thing to protect. **S13**, sudoku's clock, waits on
+Session B.
 
 S2 and **S11** are worth running in one sitting: S11 step 1 is whether the whole
 board and keypad fit above the fold, which is the same question S2 asks and the

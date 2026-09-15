@@ -119,6 +119,135 @@ h2.section {
   gap: 0.5rem;
 }
 
+/* ---- the record: the tile, and the log ---------------------------------- */
+
+/*
+  Between the games and the family strip. Below the strip it is a second scroll
+  on the phone, and the thing you have to scroll to is not the hero
+  (docs/design-language.md §3).
+*/
+.record {
+  display: grid;
+  gap: 0.6rem;
+}
+
+/* One line, small, and it never orders the family. */
+.tile {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  justify-content: space-between;
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+
+  & .yours { color: var(--ink); }
+}
+
+.log-day {
+  margin: 0.5rem 0 0;
+  font-size: var(--step-0);
+  font-weight: 700;
+}
+
+.log {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+  Art, faces, outcome. The art column is fixed so the marks line up down the
+  page — a column of shapes at one x is what makes the log skimmable before it
+  is readable — and the outcome takes what it needs from the middle.
+*/
+.play {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 48px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.log-art {
+  display: grid;
+  place-items: center;
+  inline-size: 32px;
+  block-size: 32px;
+  color: var(--tile, var(--accent));
+
+  & svg { inline-size: 32px; block-size: 32px; }
+  & img { inline-size: 32px; block-size: 32px; object-fit: cover; border-radius: 6px; }
+}
+
+.log-art.gone { color: var(--ink-soft); }
+
+.log-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/* A face always carries its name here. Two players can hold one face across
+   time — a retired profile releases it — so the caption is what tells them
+   apart, and it is not optional. */
+.log-player {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+
+  & .disc { --disc: 28px; flex: 0 0 auto; }
+  & > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+}
+
+/* Somebody who is no longer in the family strip: their rows stay, their face
+   goes quiet, and their name is what identifies them. */
+.log-player.retired {
+  & .disc { filter: grayscale(1); opacity: 0.7; }
+  & > span { color: var(--ink-soft); }
+}
+
+.log-out {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.pip {
+  margin-left: 0.2rem;
+  color: var(--accent);
+}
+
+/* Not hidden. A game nobody finished is a true thing about the family, and the
+   two ways of not finishing — a locked phone, a game walked away from — look
+   the same on purpose. */
+.play.unfinished {
+  background: transparent;
+
+  & .log-art { opacity: 0.55; }
+  & .log-none { font-weight: 600; color: var(--ink-soft); }
+}
+
 /* ---- player tiles: the strip's and the picker's, one shape at two sizes -- */
 
 .who {

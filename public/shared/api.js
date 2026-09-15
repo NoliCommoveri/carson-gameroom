@@ -1,17 +1,20 @@
-// The client half of identity and the record: six calls, and one rule about what
-// happens when the gate says no.
+// The client half of identity and the record: eight calls, and one rule about
+// what happens when the gate says no.
 //
 // The shell is a static file and cannot be gated (worker/index.js says why), so
 // the first thing any hub screen does is ask for data and find out. A 401 here
 // is not an error to render — it is a navigation to /gate, carrying where we
 // were so the gate can put us back.
 //
-// The two record calls are the exception, and pass `{ gate: false }`. Every
+// The two writing calls are the exception, and pass `{ gate: false }`. Every
 // other call is made by a screen with nothing to show without it, where going to
 // the gate is the right answer. Those two are made by a screen with a game
 // running on it, and a cookie that expired mid-session must not throw away the
 // round in progress — the 401 comes back as an ApiError for the game to say
 // something about instead.
+//
+// Reading the record is not one of them: `getPlays` and `getStats` are asked
+// for by the shelf, which has nothing to show behind an expired cookie either.
 //
 // Nothing in here touches the DOM, and nothing outside it calls fetch.
 
@@ -183,4 +186,49 @@ export function endPlay(id, result) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ result }),
   }, { gate: false });
+}
+
+/**
+ * @typedef {{ player_id: string, rank: number | null, outcome: string,
+ *   value: number | null, unit: string | null, detail: unknown }} PlayResult
+ * @typedef {{ id: string, game: string, mode: string, config: unknown,
+ *   started_at: number, ended_at: number | null, results: PlayResult[] }} Play
+ * @typedef {Player & { retired: boolean }} RecordPlayer
+ */
+
+/**
+ * A page of the log, newest first.
+ *
+ * The players it names come back with it rather than from `getPlayers`, because
+ * a result outlives the profile that wrote it: a retired player still has rows,
+ * and drawing them needs the name and face that are no longer in the live list
+ * (docs/identity-and-stats.md §3).
+ *
+ * `next` is the cursor for the page behind this one, or null at the end of the
+ * record. It is opaque — pass it back as `before` and do not read it.
+ *
+ * @param {{ game?: string, limit?: number, before?: string | null }} [query]
+ * @returns {Promise<{ plays: Play[], players: RecordPlayer[], next: string | null }>}
+ */
+export function getPlays({ game, limit, before } = {}) {
+  const params = new URLSearchParams();
+  if (game) params.set('game', game);
+  if (limit) params.set('limit', String(limit));
+  if (before) params.set('before', before);
+  const query = params.toString();
+  return call(`/api/plays${query ? `?${query}` : ''}`);
+}
+
+/**
+ * The numbers on the tile: what the family has played, and what each player has.
+ *
+ * `starts` is raw timestamps and nothing here is grouped by day — the Worker is
+ * in UTC and a day is the phone's day. public/shared/record.js does the cutting.
+ *
+ * @returns {Promise<{ plays: number, finished: number,
+ *   players: { id: string, played: number, won: number }[],
+ *   starts: number[], starts_truncated: boolean }>}
+ */
+export function getStats() {
+  return call('/api/stats');
 }

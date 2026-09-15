@@ -12,13 +12,12 @@ does not exist yet.
 | 2 | B — erase, export, re-import | [`phase-2-session-b-erase-export.md`](phase-2-session-b-erase-export.md) | Medium | ✅ Built |
 | 2 | C — gate, picker, shelf | [`phase-2-session-c-gate-picker-shelf.md`](phase-2-session-c-gate-picker-shelf.md) | Medium–Large | ✅ Built |
 | 2 | D — editing a profile | [`phase-2-session-d-editing-a-profile.md`](phase-2-session-d-editing-a-profile.md) | Small–Medium | ✅ Built |
-| 3 | A — the read API and the log | [`phase-3-session-a-the-read-api-and-the-log.md`](phase-3-session-a-the-read-api-and-the-log.md) | Medium | Spec'd, not started |
+| 3 | A — the read API and the log | [`phase-3-session-a-the-read-api-and-the-log.md`](phase-3-session-a-the-read-api-and-the-log.md) | Medium | ✅ Built |
 | 3 | B — sudoku's timer and its row | [`phase-3-session-b-sudoku-timer-and-its-row.md`](phase-3-session-b-sudoku-timer-and-its-row.md) | Small–Medium | Spec'd, not started |
 | 3 | C — the per-game views | — | Medium | Not spec'd |
 
-Session A's page is the only place the record is read from in Phase 3's first
-session, so B and C both sit on top of it and neither can start first. B and C
-are independent of each other.
+Session A is built, so B and C can each start from it. They are independent of
+each other: B is sudoku writing a row, C is reading one per game.
 
 **Session C, in one paragraph, so its shape is not a surprise.** Sudoku's bests
 by size and tier, and Pit's points and corners, each on a screen inside its own

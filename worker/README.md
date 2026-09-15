@@ -6,7 +6,8 @@ index.js        fetch(): /admin, /gate and /api/* handled here, everything else 
 admin.js        the database admin page and its seven routes
 auth.js         pure: HMAC signing, the gate and who cookies, safeNext
 gate.js         the passphrase page, and the check every /api/* call passes
-api.js          /api/players and /api/who, read and write
+api.js          /api/players and /api/who, read and write; opening and closing a play
+record.js       reading the record: /api/plays and /api/stats, the only D1 reads
 db/
   plan.js       pure: the statement splitter, checksums, applied/pending/drifted
   backup.js     pure: the export document, its fingerprint, the import plan
@@ -46,18 +47,29 @@ The other two surfaces:
 | `POST /api/players` | writes | a new profile, and picks it if the device had nobody |
 | `PATCH /api/players/:id` | writes | a screen name, a face, or both |
 | `POST /api/who` | sets | the `who` cookie, or clears it |
+| `GET /api/plays` | reads | a page of the log, with its results and the players they name |
+| `POST /api/plays` | writes | a row, when a game is dealt |
+| `POST /api/plays/:id/end` | writes | the ending, with a result or without one |
+| `GET /api/stats` | reads | the tile's counts, and raw start timestamps |
+
+`record.js` is split from `api.js` along the line the two are about: `api.js` is
+who you are, `record.js` is what happened. They share the gate, the shape of a
+refusal, and four lines of `json()`.
 
 `plan.js` is split from `migrations.js` because `node --test` cannot import a
 `.sql` file — a text import is a bundler feature and there is no bundler in CI.
 Everything with a decision in it takes strings as arguments and is tested;
 `migrations.js` turns files into strings and holds nothing worth testing.
 
-`gate.js` imports `public/shared/avatars.js` and `api.js` imports
-`public/shared/profile.js`. Those are the imports that cross from here into
-`public/`, and both modules are pure — no DOM, no window — so wrangler bundles
-them like any other file: the gate page gets real faces on it, and the editor
-and the Worker refuse a taken name by the same rule. The arrow only ever points
-this way.
+`gate.js` imports `public/shared/avatars.js`, `api.js` imports
+`public/shared/profile.js`, and `record.js` imports `public/shared/record.js`
+for `WON` — what counts as a win is a reading decision, and the Worker holding
+its own copy would make the schema a second list of game vocabulary. Those are
+the imports that cross from here into `public/`, and all three modules are pure
+— no DOM, no window — so wrangler bundles them like any other file: the gate
+page gets real faces on it, the editor and the Worker refuse a taken name by the
+same rule, and the log and the tile agree about what they are counting. The
+arrow only ever points this way.
 
 Tests may still *read* the `.sql` files with `node:fs`; reading is not
 importing. Two naming conventions make that work without importing
