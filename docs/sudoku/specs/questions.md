@@ -133,13 +133,16 @@ least one Pit session and one abandoned game already written.
 1. **Open the front page and look without scrolling.** The games have to still
    be the first thing there, with the log starting below them. If the tiles have
    been pushed off the top, the log is too tall before it is too interesting.
+   The log is today and yesterday only; there is no way to page further back
+   from here, and the question is whether anybody goes looking for one.
 2. **Ask the 5-year-old what the top row says.** Do not name the games. They
    should get *Pit* or *sudoku* from the art and whose face is on it. Where they
    hesitate is the finding, and it is probably the art at 32px.
 3. **Find the abandoned row.** It should read as unfinished at a glance and not
    as an error, and nobody should ask what went wrong with it.
-4. **Press `More`.** It should add a page below without moving what you were
-   looking at. If it jumps, the log is redrawing whole instead of appending.
+4. **Open it on a morning when nobody has played yet.** Yesterday's games should
+   be there on their own, under *Yesterday*, and the sentence where today would
+   be should not read as an error.
 5. **Read the tile aloud.** *417 games, 6 days in a row, you: 96 games.* The
    question is whether the 12-year-old reads it as a score to beat. It should
    read as the house's, not theirs.

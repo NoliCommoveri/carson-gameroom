@@ -135,10 +135,12 @@ the browser and the Worker run.
 ```js
 WON                          // Set: 'won', 'solved'
 BETTER                       // { seconds: 'lower', points: 'higher' }
+SHAPED                       // Set: units whose format already says what they are
 isWin(result)                // outcome ∈ WON
 finished(play)               // play.results.length > 0
 formatValue(value, unit)     // 412 s → "6:52"; 310 points → "310"
 bestOf(results, unit)        // min or max by BETTER; null on an unknown unit
+recent(plays, now)           // today's and yesterday's, and nothing older
 byDay(plays, now)            // [{ day, label, plays }], newest first, local days
 streak(starts, now)          // consecutive local days ending today or yesterday
 ```
@@ -150,9 +152,18 @@ streak(starts, now)          // consecutive local days ending today or yesterday
 - **An unknown unit renders as the bare number and sorts by nothing.** A game
   that invents `'tricks'` shows its value in the log the day it is written and
   waits for a line in this file before it has a best.
+- **`SHAPED` is what stops the log writing `6:52 seconds`.** `formatValue` is
+  the numeral and the unit's word follows it, unless the shape has already said
+  it. It is a set rather than a check on the string, because a format is a
+  decision this file makes and the log should not be reading it back.
 - **`label`** is `Today`, `Yesterday`, the weekday inside a week, then `3 Sep`,
-  then `3 Sep 2026` outside this year. `now` is an argument so the tests can
-  stand anywhere.
+  then `3 Sep 2026` outside this year. The shelf only ever shows the first two —
+  the rest are for Session C's per-game screens, which do show a history. `now`
+  is an argument so the tests can stand anywhere.
+- **`recent` is what keeps the front page short.** It is in this file rather
+  than in the hub because it is the same local-day question `byDay` and `streak`
+  answer, and a second definition of *yesterday* is how the three of them come
+  to disagree.
 - **`streak` counts yesterday as alive.** A streak that reads as broken at
   breakfast because nobody has played yet today is a streak that punishes
   getting up.
@@ -170,11 +181,11 @@ second scroll on the phone, and the thing you have to scroll to is not the hero.
 
 ```
 Today
-  [sudoku]  Ada                6:52
-  [pit]     Ada  Sam  Jo       310 points   ①
-  [pit]     Ada                didn't finish
+  [sudoku]  Ada                6:52          ①
+  [pit]     Ada                310 points    ①
+  [pit]                        didn't finish
 Yesterday
-  [sudoku]  Sam                4:31
+  [sudoku]  Sam                4:31          ①
 ```
 
 - **A row is the game's art, the faces, and the outcome.** The art is `games.js`'s
@@ -184,13 +195,25 @@ Yesterday
   not enough, because §5's retired players can share one.
 - **The value is `formatValue`, and rank 1 gets a pip.** No ranking beyond that
   and no per-row detail; `detail_json` is Session C's.
-- **Unfinished rows are dimmed and say `didn't finish`.** They are not hidden.
-  "We started six and finished two" is the sentence the two-call write path
-  exists to make true, and a log that quietly dropped them would undo it.
-- **One page of 30, and a `More` button** that pages with `next`. No infinite
-  scroll: the front page is a memory, not a feed, and a button that ends is
-  easier for a 5-year-old than a list that does not.
-- **Empty is a sentence pointing at the games**, not an empty box.
+- **Unfinished rows are dimmed, carry no face, and say `didn't finish`.** They
+  are not hidden. "We started six and finished two" is the sentence the two-call
+  write path exists to make true, and a log that quietly dropped them would undo
+  it. They have no face because a play that left no result left no `player_id`
+  either: who was holding the phone is in `config_json`, which this session does
+  not read (§10) and the Worker does not either. The art and the sentence are
+  what the row is, and that is enough for the row's whole job — being counted.
+- **A row's faces are its results**, so a Pit session against bots is one face
+  until Phase 7 seats more than one human in a play.
+- **Today and yesterday, and nothing older. There is no `More`.** The front page
+  answers *what are we playing*, which is a question about this evening and last.
+  Anything below the log is below the family strip on a 360px phone, and a list
+  that keeps going is a feed. The rest of the record is not lost — `/api/plays`
+  pages all of it, and Session C's per-game screens are where a history is read.
+- **One call, `limit=100`.** Two days of this family is a dozen rows; the margin
+  is there so the log never needs a second call to be complete.
+- **Empty is a sentence pointing at the games**, not an empty box, and there are
+  two of them: *nothing here yet* on a record with nothing in it, and *nothing
+  today or yesterday* on one that has older rows. The tile is what knows which.
 
 ### 5.1 The tile
 
@@ -268,7 +291,7 @@ reads as the site's memory — that is S12.
 | 3 | A play with no `ended_at` and a play closed with no result both come back, and both render as `didn't finish`. | CI + phone |
 | 4 | Days are the phone's days: an evening game does not move to tomorrow. | CI |
 | 5 | The shelf renders its games and faces when `/api/plays` fails, with one sentence where the log would be. | CI |
-| 6 | The front page shows the log under the games with faces, names and results, and `More` pages it. | Phone (S12) |
+| 6 | The front page shows today's and yesterday's games under the tiles, with faces, names and results, and nothing older. | Phone (S12) |
 | 7 | The tile shows the family's total, the streak, and the picked player's own counts, and no ordering of the family. | Phone (S12) |
 | 8 | The 5-year-old points at a row and says what it was. | Phone (S12) |
 
@@ -281,7 +304,8 @@ reads as the site's memory — that is S12.
 - **Head-to-head.** Two `play_results` rows sharing a `play_id`
   (`../../identity-and-stats.md` §4) needs Phase 7, where a play has more than
   one human in it.
-- **Filters, search, a date picker.** The log is thirty rows and a button.
+- **Filters, search, a date picker, or any way to page back.** The log is two
+  days. A history is Session C's, inside the game it is about.
 - **Deleting or editing a play.** `/admin` is the escape hatch and there is no
   second one.
 - **Any screen that ranks the family.** §1.

@@ -7,6 +7,10 @@
 //   POST  /api/plays         open a row when a game is dealt
 //   POST  /api/plays/:id/end close it, with a result or without one
 //
+// Reading the record — GET /api/plays and GET /api/stats — is worker/record.js,
+// routed from here. This file is about who you are; that one is about what
+// happened, and they share the gate and the shape of a refusal.
+//
 // Everything is behind the gate, and `who` is only ever set from a signed
 // cookie this Worker issued. That is the difference between "the client says it
 // is player 3" and "the server issued this", and it is what stops a stray
@@ -32,6 +36,7 @@
 
 import { WHO_COOKIE, COOKIE_MAX_AGE, cookieHeader, readCookie, sign, verify } from './auth.js';
 import { throughGate } from './gate.js';
+import { listPlays, readStats } from './record.js';
 import { normaliseName, profileProblem } from '../public/shared/profile.js';
 
 /** @param {unknown} body @param {number} [status] @param {Record<string,string>} [headers] */
@@ -158,8 +163,14 @@ export async function handleApi(request, env, pathname) {
   }
 
   if (pathname === '/api/plays') {
-    if (request.method !== 'POST') return json({ error: 'method' }, 405, { allow: 'POST' });
-    return startPlay(request, env.DB);
+    if (request.method === 'GET') return listPlays(request, env.DB);
+    if (request.method === 'POST') return startPlay(request, env.DB);
+    return json({ error: 'method' }, 405, { allow: 'GET, POST' });
+  }
+
+  if (pathname === '/api/stats') {
+    if (request.method !== 'GET') return json({ error: 'method' }, 405, { allow: 'GET' });
+    return readStats(env.DB);
   }
 
   if (pathname.startsWith('/api/plays/') && pathname.endsWith('/end')) {

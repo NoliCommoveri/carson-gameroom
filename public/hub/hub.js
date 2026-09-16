@@ -5,7 +5,8 @@
 //   picker   nobody is chosen on this device yet, or somebody tapped to switch.
 //            Every live profile as a big face, plus the tile that makes a new
 //            one. Tap yours.
-//   shelf    the games, and the family strip along the bottom of them.
+//   shelf    the games, the record's log under them, and the family strip
+//            along the bottom.
 //   editor   a name and thirty faces. Both ways in are on the picker — the
 //            new-player tile, and the button that changes the profile you are
 //            already on. That is where they belong: the picker is the screen
@@ -19,6 +20,12 @@
 // `who` cookie: the 12-year-old's phone opens straight to them and the shared
 // tablet is cleared back to the picker with the Nobody tile.
 //
+// The log and the tile arrive after the shelf has already been drawn. The front
+// page's job is getting a 5-year-old into a game, so a stats query that is slow
+// or broken may not stand between them and the tiles: the shelf renders from
+// /api/players alone and the record fills in under it, or says one sentence
+// where it would have been.
+//
 // Rendering is innerHTML into one container. There is nothing here worth a
 // framework, no dependency is allowed, and every screen redraws whole — the
 // most this page ever holds is thirty faces and a handful of tiles. The one
@@ -29,7 +36,8 @@
 import { AVATARS, avatarSvg, avatarTint } from '../shared/avatars.js';
 import { GAMES } from '../shared/games.js';
 import { NAME_MAX, normaliseName, profileProblem, takenAvatars } from '../shared/profile.js';
-import { ApiError, createPlayer, getPlayers, setWho, updatePlayer } from '../shared/api.js';
+import { ApiError, createPlayer, getPlayers, getPlays, getStats, setWho, updatePlayer } from '../shared/api.js';
+import { SHAPED, byDay, finished, formatValue, recent, streak } from '../shared/record.js';
 
 const root = /** @type {HTMLElement} */ (document.getElementById('app'));
 
@@ -44,14 +52,33 @@ const root = /** @type {HTMLElement} */ (document.getElementById('app'));
  */
 
 /**
+ * @typedef {{
+ *   plays: import('../shared/api.js').Play[],
+ *   faces: Map<string, { name: string, avatar: string, retired: boolean }>,
+ *   failed: boolean,
+ *   loaded: boolean,
+ * }} Record the log, and who it names
+ */
+
+/**
  * @type {{
  *   players: import('../shared/api.js').Player[],
  *   me: string | null,
  *   switching: boolean,
  *   editing: Editing | null,
+ *   record: Record,
+ *   stats: { plays: number, finished: number, players: { id: string, played: number, won: number }[],
+ *            starts: number[], starts_truncated: boolean } | null,
  * }}
  */
-const state = { players: [], me: null, switching: false, editing: null };
+const state = {
+  players: [],
+  me: null,
+  switching: false,
+  editing: null,
+  record: { plays: [], faces: new Map(), failed: false, loaded: false },
+  stats: null,
+};
 
 /** @param {string} text */
 const esc = (text) =>
@@ -150,7 +177,141 @@ function picker() {
   ${change}`;
 }
 
-/** The shelf: the games, then everybody's face. */
+/* ---- the record, on the shelf ------------------------------------------ */
+
+/** A game's mark, at 32px in its own accent, or a neutral one for a game that
+ *  has left the shelf. The record outlives games.js on purpose, and a row for a
+ *  game nobody can start any more is still a row.
+ *
+ *  @param {string} key */
+function logArt(key) {
+  const game = GAMES.find((entry) => entry.key === key);
+  if (game) return `<span class="log-art" style="--tile:${game.accent}" title="${esc(game.title)}">${game.art}</span>`;
+  return `<span class="log-art gone" title="${esc(key)}"><svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+    <rect x="8" y="8" width="48" height="48" rx="10" fill="none" stroke="currentColor" stroke-width="5"/>
+  </svg></span>`;
+}
+
+/**
+ * Who a result belongs to. The record carries its own player list because a
+ * retired profile is not in the live one, and their rows keep their author.
+ *
+ * @param {string} id
+ */
+function logFace(id) {
+  const player = state.record.faces.get(id);
+  if (!player) return '';
+  return `<span class="log-player${player.retired ? ' retired' : ''}">
+    ${face(player.avatar)}
+    <span>${esc(player.name)}</span>
+  </span>`;
+}
+
+/**
+ * What one play came to.
+ *
+ * The value is formatted by its unit and the unit's word follows it unless the
+ * shape already says it — `6:52` needs no caption, `310` needs `points`. Rank 1
+ * gets a pip and there is no ranking beyond that, and no detail: `detail_json`
+ * is the per-game views' (Session C).
+ *
+ * @param {import('../shared/api.js').Play} play
+ */
+function logOutcome(play) {
+  if (!finished(play)) return '<span class="log-none">didn\'t finish</span>';
+
+  return play.results
+    .map((result) => {
+      const shown = formatValue(result.value, result.unit);
+      const said = shown && result.unit && !SHAPED.has(result.unit) ? `${shown} ${result.unit}` : shown;
+      const pip = result.rank === 1 ? '<span class="pip" title="First">\u2460</span>' : '';
+      return `<span class="log-value">${esc(said || result.outcome)}${pip}</span>`;
+    })
+    .join('');
+}
+
+/**
+ * One row: the game's art, the faces, and the outcome.
+ *
+ * A pre-reader reads the row by shape and colour before anybody reads a word
+ * (docs/design-language.md §2), and a face always carries its name — the log is
+ * the one screen where an avatar alone is not enough, because a retired player
+ * has released their face to somebody live.
+ *
+ * **An unfinished row has no faces**, because a play that left no result left
+ * no player id either. The art and the sentence are what there is, and they are
+ * what the row is for: "we started six and finished two" is the sentence the
+ * two-call write path exists to make true, so these are dimmed rather than
+ * hidden.
+ *
+ * @param {import('../shared/api.js').Play} play
+ */
+function logRow(play) {
+  const faces = play.results.map((result) => logFace(result.player_id)).join('');
+  return `<li class="play${finished(play) ? '' : ' unfinished'}">
+    ${logArt(play.game)}
+    <span class="log-who">${faces}</span>
+    <span class="log-out">${logOutcome(play)}</span>
+  </li>`;
+}
+
+/**
+ * The tile: what the family has played, and what you have.
+ *
+ * `you:` is there only when this device has somebody picked, and it names
+ * nobody else. The front page never puts the six of you in order
+ * (docs/identity-and-stats.md §4.3).
+ */
+function recordTile() {
+  const stats = state.stats;
+  if (!stats) return '';
+
+  const run = streak(stats.starts, Date.now());
+  const capped = stats.starts_truncated && run === stats.starts.length;
+  const parts = [`${stats.plays} game${stats.plays === 1 ? '' : 's'}`];
+  if (run > 0) parts.push(`${capped ? `${run}+` : run} day${run === 1 ? '' : 's'} in a row`);
+
+  const mine = state.me ? stats.players.find((player) => player.id === state.me) : null;
+  const yours = mine
+    ? `<span class="yours">you: ${mine.played} game${mine.played === 1 ? '' : 's'}, ${mine.won} win${mine.won === 1 ? '' : 's'}</span>`
+    : '';
+
+  return `<p class="tile"><span>${esc(parts.join(' \u00b7 '))}</span>${yours}</p>`;
+}
+
+/**
+ * The log: today and yesterday, and nothing older.
+ *
+ * There is no `More`. The front page answers *what are we playing*, which is a
+ * question about this evening and last — a list that keeps going is a feed, and
+ * everything under the fold on a 360px phone is below the family strip. The rest
+ * of the record is still there and still paged by /api/plays; it is read inside
+ * each game rather than here (Session C).
+ */
+function recordLog() {
+  const { plays, failed, loaded } = state.record;
+
+  if (failed) return '<p class="note">The log is not answering right now. The games still work.</p>';
+  if (!loaded) return '<p class="note">Looking up what we played…</p>';
+
+  const days = byDay(recent(plays, Date.now()), Date.now());
+  if (days.length === 0) {
+    // "Nothing yet" and "nothing lately" are different sentences, and the tile
+    // already knows which one this is.
+    return state.stats && state.stats.plays > 0
+      ? '<p class="note">Nothing today or yesterday. Start something.</p>'
+      : '<p class="note">Nothing here yet. Play something and it appears.</p>';
+  }
+
+  return days
+    .map(
+      (day) => `<h3 class="log-day">${esc(day.label)}</h3>
+      <ul class="log">${day.plays.map(logRow).join('')}</ul>`,
+    )
+    .join('');
+}
+
+/** The shelf: the games, what we played, then everybody's face. */
 function shelf() {
   const me = state.players.find((player) => player.id === state.me);
 
@@ -165,6 +326,11 @@ function shelf() {
     </button>
   </header>
   <section class="games">${GAMES.map(gameTile).join('')}</section>
+  <section class="record">
+    ${recordTile()}
+    <h2 class="section">What we played</h2>
+    ${recordLog()}
+  </section>
   <section class="family">
     <h2 class="section">Everybody</h2>
     <div class="strip">${state.players.map((player) => playerTile(player, player.id === state.me)).join('')}</div>
@@ -366,6 +532,41 @@ async function save() {
   }
 }
 
+/**
+ * Fetch the log and the tile, after the shelf has already been drawn.
+ *
+ * The two calls are one `Promise.all` and one redraw, because two redraws on a
+ * phone are the tile appearing, the page jumping, and then the log appearing.
+ * A failure in either leaves the shelf whole: §5.2 of the spec is that a stats
+ * query may not stand between a 5-year-old and the tiles.
+ *
+ * A 401 has already navigated to the gate, and there is nothing to draw behind
+ * an expired cookie anyway.
+ */
+async function loadRecord() {
+  try {
+    // One page, sized past what two days of this family can hold, because the
+    // log shows two days and there is no second call to fetch.
+    const [page, stats] = await Promise.all([getPlays({ limit: 100 }), getStats()]);
+    state.record = {
+      plays: page.plays,
+      faces: facesFrom(page.players),
+      failed: false,
+      loaded: true,
+    };
+    state.stats = stats;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) return;
+    state.record = { ...state.record, failed: true, loaded: true };
+  }
+  if (!state.editing) render();
+}
+
+/** @param {import('../shared/api.js').RecordPlayer[]} players */
+function facesFrom(players) {
+  return new Map(players.map((player) => [player.id, { name: player.name, avatar: player.avatar, retired: player.retired }]));
+}
+
 // One listener on the container rather than one per tile: every screen here is
 // redrawn whole, and handlers attached to elements that no longer exist are the
 // bug that follows from that.
@@ -441,6 +642,8 @@ async function start() {
     state.switching = false;
     state.editing = null;
     render();
+    // Not awaited: the shelf is on the screen and the record catches up under it.
+    loadRecord();
   } catch (err) {
     // A 401 has already navigated to the gate; anything else is ours to say.
     if (err instanceof ApiError && err.status === 401) return;

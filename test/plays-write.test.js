@@ -328,14 +328,19 @@ test('a result has to be shaped like one', async () => {
   assert.equal(e.DB.plays[0].ended_at, null);
 });
 
-test('the endpoints answer only to POST', async () => {
+test('writing is POST, and the refusal names the verbs that are not', async () => {
   const e = env();
   const cookie = await sitDown(e);
   const { id } = await (await open(e, cookie)).json();
 
-  const listed = await handleApi(req('/api/plays', { cookie }), e, '/api/plays');
-  assert.equal(listed.status, 405, 'the read side is Phase 3, and says so by not existing');
+  // /api/plays also reads now (worker/record.js, test/plays-read.test.js).
+  // Anything that is neither is refused here, and the allow header says both.
+  const patched = await handleApi(req('/api/plays', { method: 'PATCH', cookie }), e, '/api/plays');
+  assert.equal(patched.status, 405);
+  assert.equal(patched.headers.get('allow'), 'GET, POST');
 
+  // Ending never reads. There is nothing at that path to GET.
   const got = await handleApi(req(`/api/plays/${id}/end`, { cookie }), e, `/api/plays/${id}/end`);
   assert.equal(got.status, 405);
+  assert.equal(got.headers.get('allow'), 'POST');
 });
